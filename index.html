@@ -14,7 +14,7 @@
 <section id="screen-start" class="screen active">
   <h1 class="app-title">Sudoku</h1>
 
-  <button id="btn-continue" class="btn btn-primary btn-continue hidden">Pokračovat v rozehrané hře</button>
+  <button id="btn-continue" class="btn btn-primary btn-huge btn-continue hidden">Pokračovat v rozehrané hře</button>
 
   <p class="subtitle">Vyber obtížnost</p>
   <div class="difficulty-buttons">
@@ -22,6 +22,9 @@
     <button class="btn btn-difficulty" data-difficulty="medium">Střední</button>
     <button class="btn btn-difficulty" data-difficulty="hard">Těžká</button>
   </div>
+
+  <div class="variant-divider">nebo</div>
+  <button class="btn btn-difficulty btn-mini" data-difficulty="mini">Mini Sudoku (6×6)</button>
 
   <button id="btn-stats" class="btn btn-secondary btn-stats">Moje statistiky</button>
 </section>
@@ -37,17 +40,7 @@
         <button id="btn-new-game" class="btn btn-secondary">Nová hra</button>
       </div>
 
-      <div id="numpad" class="numpad">
-        <button class="btn num-btn" data-num="1">1</button>
-        <button class="btn num-btn" data-num="2">2</button>
-        <button class="btn num-btn" data-num="3">3</button>
-        <button class="btn num-btn" data-num="4">4</button>
-        <button class="btn num-btn" data-num="5">5</button>
-        <button class="btn num-btn" data-num="6">6</button>
-        <button class="btn num-btn" data-num="7">7</button>
-        <button class="btn num-btn" data-num="8">8</button>
-        <button class="btn num-btn" data-num="9">9</button>
-      </div>
+      <div id="numpad" class="numpad"></div>
 
       <div class="action-buttons">
         <button id="btn-erase" class="btn btn-action">Smazat</button>
@@ -66,6 +59,8 @@
   <div id="win-overlay" class="overlay hidden">
     <div class="overlay-card">
       <p class="win-text">Výborně!<br>Sudoku je hotové.</p>
+      <p id="win-stars" class="win-stars-text"></p>
+      <p id="win-time" class="win-time-text"></p>
       <button id="btn-next-game" class="btn btn-primary btn-huge">Další hra</button>
       <button id="btn-win-menu" class="btn btn-secondary btn-huge">Zpět do menu</button>
     </div>
