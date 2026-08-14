@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sudoku-cache-v2';
+const CACHE_NAME = 'sudoku-cache-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -26,6 +26,9 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return; // don't intercept/cache cross-origin requests
+
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;

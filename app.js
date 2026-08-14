@@ -415,7 +415,13 @@ function renderStats() {
   function addRow(label, value) {
     const row = document.createElement('div');
     row.className = 'stats-row';
-    row.innerHTML = `<span>${label}</span><span class="stats-big">${value}</span>`;
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = label;
+    const valueSpan = document.createElement('span');
+    valueSpan.className = 'stats-big';
+    valueSpan.textContent = String(value);
+    row.appendChild(labelSpan);
+    row.appendChild(valueSpan);
     el.appendChild(row);
   }
 
@@ -443,24 +449,43 @@ function renderStats() {
     list.appendChild(p);
   } else {
     for (const g of last10) {
-      const item = document.createElement('div');
-      item.className = 'history-item';
       const mText = g.mistakes === 0 ? 'bez chyby' : `${g.mistakes}× chyba`;
       const hText = g.hints ? `, ${g.hints}× nápověda` : '';
       const timeText = formatDuration(g.seconds || 0);
-      const label = DIFFICULTY_LABELS[g.difficulty] || g.difficulty;
+      const label = DIFFICULTY_LABELS[g.difficulty] || String(g.difficulty);
       const stars = typeof g.stars === 'number' ? g.stars : starsForResult(g.mistakes || 0, g.hints || 0);
       const canRepeat = g.given && g.solution;
-      const repeatBtn = canRepeat ? `<button class="btn btn-repeat" data-ts="${g.ts}">Zopakovat</button>` : '';
-      item.innerHTML = `
-        <div class="history-item-top">
-          <span class="history-main">${formatDateTime(g.ts)} — ${label} — ${timeText}</span>
-          <span class="history-stars">${starsHtml(stars, true)}</span>
-        </div>
-        <div class="history-item-bottom">
-          <span class="history-detail">${mText}${hText}</span>
-          ${repeatBtn}
-        </div>`;
+
+      const item = document.createElement('div');
+      item.className = 'history-item';
+
+      const top = document.createElement('div');
+      top.className = 'history-item-top';
+      const main = document.createElement('span');
+      main.className = 'history-main';
+      main.textContent = `${formatDateTime(g.ts)} — ${label} — ${timeText}`;
+      const starsSpan = document.createElement('span');
+      starsSpan.className = 'history-stars';
+      starsSpan.innerHTML = starsHtml(stars, true);
+      top.appendChild(main);
+      top.appendChild(starsSpan);
+
+      const bottom = document.createElement('div');
+      bottom.className = 'history-item-bottom';
+      const detail = document.createElement('span');
+      detail.className = 'history-detail';
+      detail.textContent = `${mText}${hText}`;
+      bottom.appendChild(detail);
+      if (canRepeat) {
+        const repeatBtn = document.createElement('button');
+        repeatBtn.className = 'btn btn-repeat';
+        repeatBtn.dataset.ts = String(g.ts);
+        repeatBtn.textContent = 'Zopakovat';
+        bottom.appendChild(repeatBtn);
+      }
+
+      item.appendChild(top);
+      item.appendChild(bottom);
       list.appendChild(item);
     }
   }
