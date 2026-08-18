@@ -612,6 +612,11 @@ function undo() {
   const move = state.history.pop();
   if (!move) return;
   state.board[move.index] = move.prev;
+  if (move.wasHint) {
+    // Only clear the visual hint highlight — the hint was already seen, so it
+    // must keep counting against the star rating even after undoing the digit.
+    state.hintCells[move.index] = false;
+  }
   state.selected = move.index;
   renderBoard();
   persistSave();
