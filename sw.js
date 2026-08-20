@@ -12,7 +12,9 @@ const ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(ASSETS))
+      // bypass the HTTP cache: a default-mode fetch here can precache stale bytes,
+      // which silently defeats bumping CACHE_NAME after an asset changes
+      .then(cache => cache.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });
