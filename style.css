@@ -395,3 +395,12 @@ button:focus { outline: none; }
   flex-shrink: 0;
 }
 .btn-repeat:active { box-shadow: 0 1px 0 var(--color-secondary-dark); }
+
+/* Shown once the service worker has the game stored, so it is clear when the
+   tablet can be taken offline. */
+.offline-ready {
+  margin-top: 2.4vmin;
+  font-size: clamp(1rem, 2vmin, 1.4rem);
+  color: #5C7A66;
+  text-align: center;
+}
