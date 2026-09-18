@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sudoku-cache-v4';
+const CACHE_NAME = 'sudoku-cache-v5';
 const SHELL = './index.html';
 const ASSETS = [
   './',
@@ -32,6 +32,30 @@ async function precache() {
   }
 }
 
+async function shellIsComplete() {
+  const cache = await caches.open(CACHE_NAME);
+  for (const url of CRITICAL) {
+    if (!(await cache.match(url))) return false;
+  }
+  return true;
+}
+
+// The cache can disappear under a worker that is still registered and running:
+// the browser clears the origin's storage, but the registration survives. From
+// then on the app looks installed and is in fact unbootable offline. So instead
+// of trusting the install, re-check on every launch and restock while there is
+// still a network to restock from. One run at a time — a launch fires several
+// requests and they must not each start their own download.
+let restocking = null;
+function restockIfIncomplete() {
+  if (restocking) return restocking;
+  restocking = (async () => {
+    if (await shellIsComplete()) return;
+    await precache().catch(() => {});
+  })().catch(() => {}).then(() => { restocking = null; });
+  return restocking;
+}
+
 self.addEventListener('install', event => {
   event.waitUntil(precache().then(() => self.skipWaiting()));
 });
@@ -41,13 +65,14 @@ self.addEventListener('activate', event => {
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
+      .then(() => restockIfIncomplete())
   );
 });
 
-// Storage pressure can evict the cache while the registration itself survives,
-// which would leave the app registered but unable to start without wifi.
+// The page asks for this when it finds files missing, and when the tablet comes
+// back online after a launch that had nothing to work with.
 self.addEventListener('message', event => {
-  if (event.data === 'ensure-cache') event.waitUntil(precache().catch(() => {}));
+  if (event.data === 'ensure-cache') event.waitUntil(restockIfIncomplete());
 });
 
 self.addEventListener('fetch', event => {
@@ -59,27 +84,35 @@ self.addEventListener('fetch', event => {
   // never wait on the network: serve the cached shell whatever form the start
   // URL takes — trailing slash, index.html, or a stray query string.
   if (req.mode === 'navigate') {
+    // Registered synchronously, before the response body awaits anything, so the
+    // event is still dispatching and waitUntil() is allowed to extend it.
+    event.waitUntil(restockIfIncomplete());
     event.respondWith((async () => {
-      const hit = await caches.match(req, { ignoreSearch: true });
+      const cache = await caches.open(CACHE_NAME);
+      const hit = await cache.match(req, { ignoreSearch: true }) || await cache.match(SHELL);
       if (hit) return hit;
       try {
-        return await fetch(req);
+        const res = await fetch(req);
+        // Nothing was cached, so this launch is also the one chance to store the
+        // shell back — restockIfIncomplete() above is doing that in parallel.
+        if (res && res.ok) cache.put(SHELL, res.clone()).catch(() => {});
+        return res;
       } catch (e) {
-        return (await caches.match(SHELL)) || Response.error();
+        return Response.error();
       }
     })());
     return;
   }
 
   event.respondWith((async () => {
-    const cached = await caches.match(req, { ignoreSearch: true });
+    // Matched inside the current cache only: a global caches.match() can answer
+    // from a superseded version that activate() has not deleted yet.
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(req, { ignoreSearch: true });
     if (cached) return cached;
     try {
       const res = await fetch(req);
-      if (res && res.ok) {
-        const clone = res.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
-      }
+      if (res && res.ok) cache.put(req, res.clone()).catch(() => {});
       return res;
     } catch (e) {
       return Response.error();
