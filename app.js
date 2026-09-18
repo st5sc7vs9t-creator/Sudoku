@@ -9,43 +9,123 @@
    -- a corrupt saved game, an unexpected DOM state -- skipped it silently. The
    game still worked while online, and then the first launch without wifi hit
    the browser's "no internet" page, because nothing had ever been cached. */
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js', { scope: './' })
-    .catch(() => { /* offline-first: nothing useful to do if it fails */ });
+function registerWorker() {
+  if (!('serviceWorker' in navigator)) return Promise.resolve(null);
+  return navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => null);
+}
+registerWorker();
+
+/* Ask the browser to keep this game for good.
+
+   Without this the stored copy is "best effort": the browser is free to throw
+   it away whenever the tablet runs low on space or does a periodic cleanup of
+   sites it thinks are idle, and it throws away the whole site at once -- the
+   cached files AND the service worker that serves them. That is what turns a
+   game that worked offline for weeks into "Tento web není dostupný": nothing
+   broke in the game, the tablet simply deleted it while nobody was looking.
+
+   The quota is per site, and all the games live on the same one, so a single
+   cleanup takes every one of them down together -- and grants made here cover
+   every one of them together too. */
+async function requestPersistentStorage() {
+  if (!navigator.storage || !navigator.storage.persist) return null; // unknown
+  try {
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch (e) {
+    return null;
+  }
 }
 
-/* Confirm the game really is stored on the tablet and say so on the start
-   screen, so it is visible when it is safe to close it or switch wifi off.
+/* Say on the start screen what is actually stored, so it is visible when it is
+   safe to close the game or switch wifi off -- and visible when it is not.
    On its own load listener, so a failure in init() cannot take it down. */
-let ensureCacheAsked = false;
+const OFFLINE_MESSAGES = {
+  saving:  { text: 'Ukládám hru do tabletu…', cls: 'offline-working' },
+  ready:   { text: '✓ Hra je uložena v tabletu – funguje i bez internetu', cls: 'offline-ok' },
+  fragile: { text: '✓ Hra je uložena, ale tablet ji může smazat. Přidejte si hru na plochu (v prohlížeči nabídka ⋮ → Přidat na plochu) a bude uložena natrvalo.', cls: 'offline-warn' },
+  failed:  { text: '⚠ Hru se zatím nepodařilo uložit do tabletu. Připojte se k internetu a spusťte ji znovu – bez toho nebude fungovat offline.', cls: 'offline-bad' },
+};
 
-function showOfflineReady() {
+let offlineStatusKey = 'saving'; // matches what index.html starts out saying
+
+function setOfflineStatus(key) {
   const el = document.getElementById('offline-ready');
-  if (el) el.classList.remove('hidden');
+  const msg = OFFLINE_MESSAGES[key];
+  if (!el || !msg) return;
+  offlineStatusKey = key;
+  el.textContent = msg.text;
+  el.className = 'offline-ready ' + msg.cls;
+  el.hidden = false; // the games hide this line either way round
 }
+
+const OFFLINE_NEEDED = ['./index.html', './style.css', './app.js'];
+
+async function cachedFilesPresent() {
+  const hits = await Promise.all(OFFLINE_NEEDED.map(u => caches.match(u, { ignoreSearch: true })));
+  return hits.every(Boolean);
+}
+
+let verifyRunning = false;
 
 async function verifyOfflineReady() {
-  if (!('caches' in window) || !('serviceWorker' in navigator)) return;
-  const needed = ['./index.html', './style.css', './app.js'];
-  for (let attempt = 0; attempt < 40; attempt++) {
-    try {
-      const hits = await Promise.all(needed.map(u => caches.match(u, { ignoreSearch: true })));
-      if (hits.every(Boolean) && navigator.serviceWorker.controller) {
-        showOfflineReady();
+  if (!('caches' in window) || !('serviceWorker' in navigator)) {
+    // Nothing can be stored here, so promising anything would be a lie.
+    const el = document.getElementById('offline-ready');
+    if (el) { el.hidden = true; el.classList.add('hidden'); }
+    return;
+  }
+  if (verifyRunning) return;
+  verifyRunning = true;
+  /* Re-checks happen every time the game is reopened. Only say "saving" again
+     if the last word on the subject was that it had not worked -- otherwise a
+     message that already reads "stored" would flicker back for no reason. */
+  if (offlineStatusKey === 'failed') setOfflineStatus('saving');
+  let persisted = await requestPersistentStorage();
+  let asked = 0;
+  try {
+    for (let attempt = 0; attempt < 40; attempt++) {
+      let reg = null;
+      try { reg = await navigator.serviceWorker.getRegistration('./'); } catch (e) { return; }
+      /* The registration itself can be gone -- cleared with the rest of the
+         site's storage. Put it back; offline this fails harmlessly and the
+         next launch with wifi gets another go. */
+      if (!reg) reg = await registerWorker();
+
+      let present = false;
+      try { present = await cachedFilesPresent(); } catch (e) { return; }
+      const worker = (reg && (reg.active || reg.waiting)) || navigator.serviceWorker.controller;
+
+      if (present && worker) {
+        /* Chrome only grants persistence once the game has been used enough or
+           added to the home screen, so a refusal early on is worth retrying. */
+        if (persisted !== true) persisted = await requestPersistentStorage();
+        setOfflineStatus(persisted === false ? 'fragile' : 'ready');
         return;
       }
-      /* Registered, but the files are gone -- evicted under storage pressure,
-         or an install that never finished. Ask the worker to stock up again. */
-      if (!ensureCacheAsked && navigator.serviceWorker.controller) {
-        ensureCacheAsked = true;
-        navigator.serviceWorker.controller.postMessage('ensure-cache');
+
+      /* Registered but the files are missing -- evicted, or an install that
+         never finished. Ask the worker to stock up again. Asked more than once,
+         spaced out, because the first attempt may have been made offline. */
+      if (worker && asked < 4 && attempt % 5 === 4) {
+        asked++;
+        worker.postMessage('ensure-cache');
       }
-    } catch (e) { return; }
-    await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 500));
+    }
+    setOfflineStatus('failed');
+  } finally {
+    verifyRunning = false;
   }
 }
 
 window.addEventListener('load', verifyOfflineReady);
+/* A launch with no wifi cannot store anything. Try again the moment there is a
+   connection, instead of waiting for the next launch that may never come. */
+window.addEventListener('online', verifyOfflineReady);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) verifyOfflineReady();
+});
 
 /* ============================================================
    Sudoku engine — bitmask backtracking solver + generator

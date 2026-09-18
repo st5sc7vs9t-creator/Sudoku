@@ -403,4 +403,14 @@ button:focus { outline: none; }
   font-size: clamp(1rem, 2vmin, 1.4rem);
   color: #5C7A66;
   text-align: center;
+  max-width: 62ch;
+  padding: 0 3vmin;
+  line-height: 1.5;
 }
+
+.offline-working { color: #9aa8a0; }
+.offline-ok      { color: #9fd8b4; }
+/* Stored, but the tablet is still free to delete it -- say so loudly enough to
+   be read before the wifi goes off, not after. */
+.offline-warn    { color: #ffd479; }
+.offline-bad     { color: #ff9f9f; }
