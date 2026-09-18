@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sudoku-cache-v5';
+const CACHE_NAME = 'sudoku-cache-v6';
 const SHELL = './index.html';
 const ASSETS = [
   './',
@@ -60,13 +60,52 @@ self.addEventListener('install', event => {
   event.waitUntil(precache().then(() => self.skipWaiting()));
 });
 
+// A page that is already open keeps running the build it was loaded with, so
+// storing the new files is only half an update. The page cannot fix that for
+// itself -- the code that would know to reload only ships in the build being
+// installed -- so the worker reloads it, once the files are actually in place.
+//
+// Asking first, because this can land while somebody is playing: a build that
+// knows the question answers it, and a game in progress is left alone. A build
+// too old to know the question never answers, which is exactly the case worth
+// refreshing, so silence is taken as a yes after a short wait.
+function mayRefresh(client) {
+  return new Promise(resolve => {
+    const channel = new MessageChannel();
+    const done = ok => { clearTimeout(timer); resolve(ok); };
+    const timer = setTimeout(() => done(true), 1500);
+    channel.port1.onmessage = e => done(!(e.data && e.data.busy));
+    try {
+      client.postMessage({ type: 'may-i-refresh' }, [channel.port2]);
+    } catch (e) {
+      done(true);
+    }
+  });
+}
+
+async function refreshClients() {
+  const clients = await self.clients.matchAll({ type: 'window' });
+  await Promise.all(clients.map(async client => {
+    if (!(await mayRefresh(client))) return;
+    // Started, deliberately not awaited. The reload is served by this worker's
+    // own fetch handler, which does not run until activate() has finished, and
+    // activate() is waiting on this function: awaiting the navigation here has
+    // the two of them wait for each other and the update never lands.
+    client.navigate(client.url).catch(() => {});
+  }));
+}
+
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())
-      .then(() => restockIfIncomplete())
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    const stale = keys.filter(k => k !== CACHE_NAME);
+    await Promise.all(stale.map(k => caches.delete(k)));
+    await self.clients.claim();
+    await restockIfIncomplete();
+    // Only an upgrade leaves a stale page in front of anyone. A first install
+    // has nothing to replace, and reloading there would be a flicker for free.
+    if (stale.length) await refreshClients();
+  })());
 });
 
 // The page asks for this when it finds files missing, and when the tablet comes

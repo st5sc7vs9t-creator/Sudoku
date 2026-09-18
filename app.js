@@ -119,6 +119,39 @@ async function verifyOfflineReady() {
   }
 }
 
+/* Shown on the start screen. Without it there is no way to tell, from the tablet
+   itself, whether an update ever arrived: every line the start screen used to
+   have reads exactly the same before and after one. A version that is missing
+   altogether is the old build, which had nowhere to print it. */
+const APP_VERSION = '18. 9. 2026';
+
+function showVersion() {
+  const el = document.getElementById('app-version');
+  if (el) el.textContent = 'verze ' + APP_VERSION;
+}
+document.addEventListener('DOMContentLoaded', showVersion);
+
+/* An update reaches the tablet as new files in the cache, but the page in front
+   of the player goes on running the old ones until something reloads it, so it
+   used to take a second launch before an update was the thing being played --
+   and on a tablet opened once a day, that is a day late, with no way to tell
+   which of the two launches you are on.
+
+   The reload is driven from the worker rather than from here, because the page
+   that needs replacing is by definition running the previous build: whatever we
+   write here can only ever help the update after this one. All this side does is
+   answer the question the worker asks first, so a game in progress is left alone
+   and only an idle start screen gets refreshed underneath. */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (!event.data || event.data.type !== 'may-i-refresh') return;
+    const port = event.ports && event.ports[0];
+    const start = document.getElementById('screen-start');
+    const midGame = !!start && !start.classList.contains('active');
+    if (port) port.postMessage({ busy: midGame });
+  });
+}
+
 window.addEventListener('load', verifyOfflineReady);
 /* A launch with no wifi cannot store anything. Try again the moment there is a
    connection, instead of waiting for the next launch that may never come. */
