@@ -1,4 +1,5 @@
-const CACHE_NAME = 'sudoku-cache-v6';
+const CACHE_PREFIX = 'sudoku-cache-';
+const CACHE_NAME = CACHE_PREFIX + 'v7';
 const SHELL = './index.html';
 const ASSETS = [
   './',
@@ -98,7 +99,10 @@ async function refreshClients() {
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    const stale = keys.filter(k => k !== CACHE_NAME);
+    // Only this game's own older versions. All the games share one origin and so
+    // one Cache Storage; deleting every other key wiped the other games' offline
+    // copies whenever this one updated.
+    const stale = keys.filter(k => k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME);
     await Promise.all(stale.map(k => caches.delete(k)));
     await self.clients.claim();
     await restockIfIncomplete();
