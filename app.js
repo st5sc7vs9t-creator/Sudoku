@@ -123,7 +123,7 @@ async function verifyOfflineReady() {
    itself, whether an update ever arrived: every line the start screen used to
    have reads exactly the same before and after one. A version that is missing
    altogether is the old build, which had nowhere to print it. */
-const APP_VERSION = '18. 9. 2026';
+const APP_VERSION = '30. 9. 2026';
 
 function showVersion() {
   const el = document.getElementById('app-version');
